@@ -47,4 +47,8 @@ def srtf_schedule(processes):
             current.turnaround_time = current.completion_time - current.arrival_time
             current.waiting_time = current.turnaround_time - current.burst_time
 
+<<<<<<< HEAD
     return gantt, processes
+=======
+    return gantt, processes
+>>>>>>> bad0ba2adb82b2d58419c19667b2235c25cb1031

@@ -16,6 +16,7 @@ class CPUSchedulerApp:
         self.animation_id = None
         self.simulation_speed = 1.0
         self.is_simulating = False
+        self.current_process = None
         self.setup_ui()
 
     def setup_ui(self):
@@ -37,6 +38,7 @@ class CPUSchedulerApp:
         self.speed_scale = tk.Scale(control_frame, from_=0.1, to=2.0, length=80, bg="#f0f0f0", highlightthickness=0)
         self.speed_scale.set(1.0)
         self.speed_scale.grid(row=0, column=9, padx=2)
+
         process_frame = tk.Frame(self.root, bg="#f0f0f0")
         process_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         columns = ("PID", "Arrival", "Burst", "Priority", "Status")
@@ -45,10 +47,12 @@ class CPUSchedulerApp:
             self.process_table.heading(col, text=col)
             self.process_table.column(col, width=80, anchor=tk.CENTER)
         self.process_table.pack(fill=tk.BOTH, expand=True)
+
         gantt_frame = tk.Frame(self.root, bg="#ffffff", bd=1, relief=tk.SUNKEN)
-        gantt_frame.pack(fill=tk.BOTH, padx=10, pady=(0,10), ipady=5)
+        gantt_frame.pack(fill=tk.BOTH, padx=10, pady=(0, 10), ipady=5)
         self.gantt_canvas = tk.Canvas(gantt_frame, bg="white", highlightthickness=0)
         self.gantt_canvas.pack(fill=tk.BOTH, expand=True)
+
         stats_frame = tk.Frame(self.root, bg="#f0f0f0")
         stats_frame.pack(fill=tk.X, padx=10, pady=5)
         self.avg_waiting = tk.Label(stats_frame, text="Avg Waiting: --", bg="#f0f0f0", font=('Arial', 9))
@@ -73,6 +77,7 @@ class CPUSchedulerApp:
         tk.Label(dialog, text="Priority:").grid(row=2, column=0, padx=5, pady=5)
         priority_entry = tk.Entry(dialog)
         priority_entry.grid(row=2, column=1, padx=5, pady=5)
+
         def add():
             try:
                 arrival = int(arrival_entry.get() or 0)
@@ -84,26 +89,24 @@ class CPUSchedulerApp:
                 dialog.destroy()
             except ValueError:
                 messagebox.showerror("Error", "Please enter valid numbers")
+
         tk.Button(dialog, text="Add", command=add).grid(row=3, columnspan=2, pady=10)
 
     def generate_random(self):
-        try:
-            count = simpledialog.askinteger("Random Processes", "Number of processes:", minvalue=1, maxvalue=20)
-            max_arrival = simpledialog.askinteger("Random Processes", "Maximum arrival time:", minvalue=0)
-            max_burst = simpledialog.askinteger("Random Processes", "Maximum burst time:", minvalue=1)
-            max_priority = simpledialog.askinteger("Random Processes", "Maximum priority (0 for none):", minvalue=0) or 0
-            if None in (count, max_arrival, max_burst):
-                return
-            self.processes = []
-            for pid in range(1, count + 1):
-                arrival = random.randint(0, max_arrival)
-                burst = random.randint(1, max_burst)
-                priority = random.randint(0, max_priority)
-                self.processes.append(Process(pid, arrival, burst, priority))
-            self.update_process_table()
-            messagebox.showinfo("Success", f"Generated {count} random processes")
-        except ValueError as e:
-            messagebox.showerror("Error", f"Invalid input: {str(e)}")
+        count = 5
+        max_arrival = 10
+        max_burst = 10
+        max_priority = 5
+
+        self.processes = []
+        for pid in range(1, count + 1):
+            arrival = random.randint(0, max_arrival)
+            burst = random.randint(1, max_burst)
+            priority = random.randint(0, max_priority)
+            self.processes.append(Process(pid, arrival, burst, priority))
+
+        self.update_process_table()
+        messagebox.showinfo("Random Processes", f"Generated {count} random processes.")
 
     def update_process_table(self):
         self.process_table.delete(*self.process_table.get_children())
@@ -133,11 +136,12 @@ class CPUSchedulerApp:
         elif algorithm == "Round Robin":
             self.simulate_rr(quantum)
         elif algorithm == "MLFQ":
-            self.simulate_mlfq([quantum]*4, [10, 20, 40, 80])
+            self.simulate_mlfq([quantum] * 4, [10, 20, 40, 80])
 
     def simulate_fcfs(self):
-        processes = sorted(self.processes.copy(), key=lambda x: x.arrival_time)
-        self.animate_simulation(processes)
+        self.fcfs_queue = deque(sorted(self.processes.copy(), key=lambda x: x.arrival_time))
+        self.current_process = None
+        self.animate_simulation(self.fcfs_queue, fcfs=True)
 
     def simulate_sjf(self):
         processes = sorted(self.processes.copy(), key=lambda x: x.arrival_time)
@@ -163,17 +167,36 @@ class CPUSchedulerApp:
         delay = int(1000 / self.simulation_speed)
         self.animation_id = self.root.after(delay, lambda: self.animate_simulation(processes, **kwargs))
 
-    def update_simulation_step(self, processes, **kwargs):
+    def update_simulation_step(self, processes, fcfs=False, **kwargs):
         self.current_time += 1
-        for p in processes:
-            if p.arrival_time <= self.current_time and p.remaining_time > 0:
-                p.remaining_time -= 1
+
+        if fcfs:
+            if not self.current_process and self.fcfs_queue:
+                if self.fcfs_queue[0].arrival_time <= self.current_time:
+                    self.current_process = self.fcfs_queue.popleft()
+
+            if self.current_process:
+                p = self.current_process
                 if p.response_time == -1:
                     p.response_time = self.current_time - p.arrival_time
-                if p.remaining_time == 0:
+                p.remaining_time -= 1
+                if p.remaining_time <= 0:
                     p.completion_time = self.current_time
                     p.turnaround_time = p.completion_time - p.arrival_time
                     p.waiting_time = p.turnaround_time - p.burst_time
+                    self.current_process = None
+
+        else:
+            for p in processes:
+                if p.arrival_time <= self.current_time and p.remaining_time > 0:
+                    p.remaining_time -= 1
+                    if p.response_time == -1:
+                        p.response_time = self.current_time - p.arrival_time
+                    if p.remaining_time == 0:
+                        p.completion_time = self.current_time
+                        p.turnaround_time = p.completion_time - p.arrival_time
+                        p.waiting_time = p.turnaround_time - p.burst_time
+
         self.update_process_table()
         total_burst = sum(p.burst_time for p in self.processes)
         completed = sum(p.burst_time - p.remaining_time for p in self.processes)
@@ -184,17 +207,18 @@ class CPUSchedulerApp:
         self.gantt_canvas.delete("all")
         width = self.gantt_canvas.winfo_width()
         height = self.gantt_canvas.winfo_height()
-        max_time = max((p.completion_time for p in self.processes if p.completion_time > 0), default=max((p.arrival_time + p.burst_time for p in self.processes), default=1))
+        max_time = max((p.completion_time for p in self.processes if p.completion_time > 0),
+                       default=max((p.arrival_time + p.burst_time for p in self.processes), default=1))
         time_scale = (width - 100) / max(1, max_time)
         row_height = 18
         chart_top = 20
         max_rows = (height - 40) // (row_height + 2)
-        self.gantt_canvas.create_line(50, height-15, width-50, height-15, width=1, fill="#888")
+        self.gantt_canvas.create_line(50, height - 15, width - 50, height - 15, width=1, fill="#888")
         marker_step = max(1, round(max_time / 10))
         for t in range(0, max_time + 1, marker_step):
             x_pos = 50 + t * time_scale
-            self.gantt_canvas.create_line(x_pos, height-10, x_pos, height-20, fill="#555")
-            self.gantt_canvas.create_text(x_pos, height-8, text=str(t), font=('Arial', 7), anchor=tk.N)
+            self.gantt_canvas.create_line(x_pos, height - 10, x_pos, height - 20, fill="#555")
+            self.gantt_canvas.create_text(x_pos, height - 8, text=str(t), font=('Arial', 7), anchor=tk.N)
         visible_processes = [p for p in self.processes if p.arrival_time <= self.current_time]
         rows = [[] for _ in range(max_rows)]
         for p in sorted(visible_processes, key=lambda x: x.arrival_time):
@@ -214,14 +238,16 @@ class CPUSchedulerApp:
         for row_idx, row in enumerate(rows[:max_rows]):
             y_base = chart_top + row_idx * (row_height + 2)
             for start_x, end_x, p in row:
-                self.gantt_canvas.create_rectangle(start_x, y_base, end_x, y_base + row_height, fill=p.color, outline="#333", width=0.5)
+                self.gantt_canvas.create_rectangle(start_x, y_base, end_x, y_base + row_height, fill=p.color,
+                                                   outline="#333", width=0.5)
                 if end_x - start_x > 20:
-                    self.gantt_canvas.create_text((start_x + end_x)/2, y_base + row_height/2, text=f"P{p.pid}", font=('Arial', 7))
-                if p.remaining_time > 0:
-                    self.gantt_canvas.create_rectangle(end_x - 3, y_base, end_x, y_base + 3, fill="#ff0", outline="")
+                    self.gantt_canvas.create_text((start_x + end_x) / 2, y_base + row_height / 2, text=f"P{p.pid}",
+                                                  font=('Arial', 7))
         current_x = 50 + min(self.current_time, max_time) * time_scale
-        self.gantt_canvas.create_line(current_x, chart_top - 5, current_x, height-15, fill="#f00", width=1, arrow=tk.LAST)
-        self.gantt_canvas.create_text(current_x, chart_top - 8, text=f"{self.current_time}", font=('Arial', 7, 'bold'), anchor=tk.S)
+        self.gantt_canvas.create_line(current_x, chart_top - 5, current_x, height - 15, fill="#f00", width=1,
+                                      arrow=tk.LAST)
+        self.gantt_canvas.create_text(current_x, chart_top - 8, text=f"{self.current_time}", font=('Arial', 7, 'bold'),
+                                      anchor=tk.S)
 
     def calculate_stats(self):
         completed = [p for p in self.processes if p.completion_time > 0]
@@ -240,6 +266,7 @@ class CPUSchedulerApp:
             self.animation_id = None
         self.is_simulating = False
         self.current_time = 0
+        self.current_process = None
         self.processes = []
         self.process_table.delete(*self.process_table.get_children())
         self.gantt_canvas.delete("all")
