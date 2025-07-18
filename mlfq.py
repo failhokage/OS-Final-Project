@@ -1,58 +1,121 @@
 from collections import deque
-from process import Process
+from utils import print_gantt_chart, print_metrics, print_averages
 
-def schedule(processes, time_quantums=[4,8,16,32], allotment_times=[10,20,40,80]):
-    time = 0
+def mlfq(processes, quantums=[2, 4, 8, 16], allotments=[5, 10, 20, float('inf')]):
+    queues = [deque() for _ in range(4)]  
     gantt = []
-    queues = [deque() for _ in range(4)]
-    remaining_processes = sorted(processes.copy(), key=lambda x: x.arrival_time)
-    allotment_counters = [0] * 4
-    
-    while remaining_processes or any(queues):
-        while remaining_processes and remaining_processes[0].arrival_time <= time:
-            p = remaining_processes.pop(0)
-            p.priority = 0
-            queues[0].append(p)
-        
-        current_queue = next((i for i, q in enumerate(queues) if q), None)
-        
+    current_time = 0
+    prev_pid = None
+    last_start = 0
+    MAX_TIME = 1000  
+
+ 
+    for p in processes:
+        p.priority = 0
+        p.remaining_time = p.burst_time
+        p.allotment = allotments[0]
+        p.quantum = quantums[0]
+        p.first_execution = -1
+        p.completed = False
+
+    while current_time < MAX_TIME:
+        if all(p.completed for p in processes):
+            break
+
+   
+        if current_time > 0 and current_time % 50 == 0:
+            for p in processes:
+                if not p.completed and p.priority > 0:
+                    p.priority = 0
+                    p.allotment = allotments[0]
+                    p.quantum = quantums[0]
+                    queues[0].append(p)
+
+   
+        for p in processes:
+            if (not p.completed and 
+                p.arrival_time <= current_time and 
+                p not in sum([list(q) for q in queues], [])):
+                queues[0].append(p)
+
+     
+        current_queue = next((i for i in range(4) if queues[i]), None)
         if current_queue is None:
-            if remaining_processes:
-                next_arrival = remaining_processes[0].arrival_time
-                idle_time = next_arrival - time
-                gantt.append(('IDLE', idle_time))
-                time = next_arrival
-                allotment_counters = [0] * 4
-                continue
-            else:
-                break
-        
-        current = queues[current_queue].popleft()
-        if current.response_time == -1:
-            current.response_time = time - current.arrival_time
-        
-        execution_time = min(time_quantums[current_queue], current.remaining_time)
-        gantt.append((f'P{current.pid}(Q{current_queue})', execution_time))
-        time += execution_time
-        current.remaining_time -= execution_time
-        allotment_counters[current_queue] += execution_time
-        
-        while remaining_processes and remaining_processes[0].arrival_time <= time:
-            p = remaining_processes.pop(0)
-            p.priority = 0
-            queues[0].append(p)
-        
-        if current.remaining_time > 0:
-            if allotment_counters[current_queue] >= allotment_times[current_queue]:
-                new_queue = min(current_queue + 1, 3)
-                current.priority = new_queue
-                queues[new_queue].append(current)
-                allotment_counters[current_queue] = 0
-            else:
-                queues[current_queue].append(current)
+            current_time += 1
+            continue
+
+        current_process = queues[current_queue].popleft()
+
+        if current_process.first_execution == -1:
+            current_process.first_execution = current_time
+
+ 
+        exec_time = min(
+            current_process.quantum,
+            current_process.remaining_time,
+            current_process.allotment
+        )
+        exec_time = max(exec_time, 1)  
+
+
+        if prev_pid != current_process.pid:
+            if prev_pid is not None:
+                gantt.append((last_start, current_time, prev_pid))
+            last_start = current_time
+
+     
+        current_process.remaining_time -= exec_time
+        current_process.allotment -= exec_time
+        current_process.quantum -= exec_time
+        current_time += exec_time
+        prev_pid = current_process.pid
+
+
+        if current_process.remaining_time <= 0:
+            gantt.append((last_start, current_time, current_process.pid))
+            current_process.completion_time = current_time
+            current_process.completed = True
+            prev_pid = None
         else:
-            current.completion_time = time
-            current.turnaround_time = current.completion_time - current.arrival_time
-            current.waiting_time = current.turnaround_time - current.burst_time
-    
-    return gantt, processes
+        
+            if current_process.allotment <= 0 and current_process.priority < 3:
+                current_process.priority += 1
+                current_process.allotment = allotments[current_process.priority]
+                current_process.quantum = quantums[current_process.priority]
+            elif current_process.quantum <= 0:
+                current_process.quantum = quantums[current_process.priority]
+
+            queues[current_process.priority].append(current_process)
+
+
+    if current_time >= MAX_TIME:
+        print("Warning: Reached MAX_TIME. Forcing completion.")
+        for p in processes:
+            if not p.completed:
+                p.completion_time = current_time
+                p.remaining_time = 0
+                p.completed = True
+                gantt.append((last_start, current_time, p.pid))
+
+
+    for p in processes:
+        p.turnaround_time = p.completion_time - p.arrival_time
+        p.response_time = p.first_execution - p.arrival_time
+
+    return gantt
+
+def run_mlfq(processes):
+    print("\nRunning MLFQ Scheduling Algorithm")
+
+  
+    for p in processes:
+        p.remaining_time = p.burst_time
+        p.first_execution = -1
+        p.completion_time = -1
+        p.completed = False
+
+    gantt = mlfq(processes)
+
+    print_gantt_chart(processes, gantt)
+    print_metrics(processes)
+    print_averages(processes)

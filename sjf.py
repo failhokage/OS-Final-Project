@@ -1,35 +1,37 @@
 from process import Process
+from utils import print_gantt_chart, print_metrics, print_averages
 
-def schedule(processes):
-    time = 0
+def sjf(processes):
+    processes.sort(key=lambda x: x.arrival_time)
     gantt = []
-    remaining_processes = processes.copy()
-    remaining_processes.sort(key=lambda x: x.arrival_time)
-    queue = []
+    current_time = 0
+    completed = 0
+    n = len(processes)
     
-    while remaining_processes or queue:
-        while remaining_processes and remaining_processes[0].arrival_time <= time:
-            queue.append(remaining_processes.pop(0))
+    while completed != n:
+        ready = [p for p in processes if p.arrival_time <= current_time and p.remaining_time == p.burst_time]
+        ready.sort(key=lambda x: x.burst_time)
         
-        if not queue:
-            if remaining_processes:
-                next_arrival = remaining_processes[0].arrival_time
-                idle_time = next_arrival - time
-                gantt.append(('IDLE', idle_time))
-                time = next_arrival
-                continue
+        if not ready:
+            current_time += 1
+            continue
+            
+        p = ready[0]
+        execution_time = p.burst_time
+        gantt.append((execution_time, p.pid))
         
-        queue.sort(key=lambda x: x.remaining_time)
-        current = queue.pop(0)
-        if current.response_time == -1:
-            current.response_time = time - current.arrival_time
-        
-        execution_time = current.remaining_time
-        gantt.append((f'P{current.pid}', execution_time))
-        time += execution_time
-        current.remaining_time = 0
-        current.completion_time = time
-        current.turnaround_time = current.completion_time - current.arrival_time
-        current.waiting_time = current.turnaround_time - current.burst_time
+        p.completion_time = current_time + execution_time
+        p.turnaround_time = p.completion_time - p.arrival_time
+        p.response_time = current_time - p.arrival_time
+        p.remaining_time = 0
+        current_time = p.completion_time
+        completed += 1
     
-    return gantt, processes
+    return gantt
+
+def run_sjf(processes):
+    print("\nRunning SJF (Non-Preemptive) Scheduling Algorithm")
+    gantt = sjf(processes)
+    print_gantt_chart(processes, gantt)
+    print_metrics(processes)
+    print_averages(processes)

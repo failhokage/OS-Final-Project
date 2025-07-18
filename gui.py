@@ -1,281 +1,220 @@
 import tkinter as tk
-from tkinter import ttk, simpledialog, messagebox
-import random
-from collections import deque
+from tkinter import ttk, messagebox
 from process import Process
+import fcfs, sjf, srtf
+from utils import generate_random_processes
+import random
 
-class CPUSchedulerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("CPU Scheduling Simulator")
-        self.root.geometry("1200x700")
-        self.root.configure(bg="#f0f0f0")
-        self.processes = []
-        self.current_time = 0
-        self.simulation_end_time = 0
-        self.animation_id = None
-        self.simulation_speed = 1.0
-        self.is_simulating = False
-        self.current_process = None
-        self.setup_ui()
-
-    def setup_ui(self):
-        control_frame = tk.Frame(self.root, bg="#f0f0f0", padx=10, pady=5)
-        control_frame.pack(fill=tk.X)
-        tk.Label(control_frame, text="Algorithm:", bg="#f0f0f0").grid(row=0, column=0, padx=2)
-        self.algorithm = ttk.Combobox(control_frame, values=["FCFS", "SJF", "Round Robin", "MLFQ"], width=12)
-        self.algorithm.grid(row=0, column=1, padx=2)
-        self.algorithm.current(0)
-        tk.Label(control_frame, text="Quantum:", bg="#f0f0f0").grid(row=0, column=2, padx=2)
-        self.quantum_entry = tk.Entry(control_frame, width=4)
-        self.quantum_entry.grid(row=0, column=3, padx=2)
-        self.quantum_entry.insert(0, "4")
-        tk.Button(control_frame, text="Add", command=self.add_process_dialog, width=6).grid(row=0, column=4, padx=2)
-        tk.Button(control_frame, text="Random", command=self.generate_random, width=8).grid(row=0, column=5, padx=2)
-        tk.Button(control_frame, text="Simulate", command=self.start_simulation, width=8).grid(row=0, column=6, padx=2)
-        tk.Button(control_frame, text="Reset", command=self.reset, width=6).grid(row=0, column=7, padx=2)
-        tk.Label(control_frame, text="Speed:", bg="#f0f0f0").grid(row=0, column=8, padx=2)
-        self.speed_scale = tk.Scale(control_frame, from_=0.1, to=2.0, length=80, bg="#f0f0f0", highlightthickness=0)
-        self.speed_scale.set(1.0)
-        self.speed_scale.grid(row=0, column=9, padx=2)
-
-        process_frame = tk.Frame(self.root, bg="#f0f0f0")
-        process_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        columns = ("PID", "Arrival", "Burst", "Priority", "Status")
-        self.process_table = ttk.Treeview(process_frame, columns=columns, show="headings", height=8)
-        for col in columns:
-            self.process_table.heading(col, text=col)
-            self.process_table.column(col, width=80, anchor=tk.CENTER)
-        self.process_table.pack(fill=tk.BOTH, expand=True)
-
-        gantt_frame = tk.Frame(self.root, bg="#ffffff", bd=1, relief=tk.SUNKEN)
-        gantt_frame.pack(fill=tk.BOTH, padx=10, pady=(0, 10), ipady=5)
-        self.gantt_canvas = tk.Canvas(gantt_frame, bg="white", highlightthickness=0)
-        self.gantt_canvas.pack(fill=tk.BOTH, expand=True)
-
-        stats_frame = tk.Frame(self.root, bg="#f0f0f0")
-        stats_frame.pack(fill=tk.X, padx=10, pady=5)
-        self.avg_waiting = tk.Label(stats_frame, text="Avg Waiting: --", bg="#f0f0f0", font=('Arial', 9))
-        self.avg_waiting.pack(side=tk.LEFT, padx=10)
-        self.avg_turnaround = tk.Label(stats_frame, text="Avg Turnaround: --", bg="#f0f0f0", font=('Arial', 9))
-        self.avg_turnaround.pack(side=tk.LEFT, padx=10)
-        self.total_time = tk.Label(stats_frame, text="Total Time: --", bg="#f0f0f0", font=('Arial', 9))
-        self.total_time.pack(side=tk.LEFT, padx=10)
-        self.progress_label = tk.Label(stats_frame, text="Progress: 0%", bg="#f0f0f0", font=('Arial', 9))
-        self.progress_label.pack(side=tk.RIGHT, padx=10)
-
-    def add_process_dialog(self):
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Add Process")
-        dialog.geometry("300x200")
-        tk.Label(dialog, text="Arrival Time:").grid(row=0, column=0, padx=5, pady=5)
-        arrival_entry = tk.Entry(dialog)
-        arrival_entry.grid(row=0, column=1, padx=5, pady=5)
-        tk.Label(dialog, text="Burst Time:").grid(row=1, column=0, padx=5, pady=5)
-        burst_entry = tk.Entry(dialog)
-        burst_entry.grid(row=1, column=1, padx=5, pady=5)
-        tk.Label(dialog, text="Priority:").grid(row=2, column=0, padx=5, pady=5)
-        priority_entry = tk.Entry(dialog)
-        priority_entry.grid(row=2, column=1, padx=5, pady=5)
-
-        def add():
-            try:
-                arrival = int(arrival_entry.get() or 0)
-                burst = int(burst_entry.get())
-                priority = int(priority_entry.get() or 0)
-                pid = len(self.processes) + 1
-                self.processes.append(Process(pid, arrival, burst, priority))
-                self.update_process_table()
-                dialog.destroy()
-            except ValueError:
-                messagebox.showerror("Error", "Please enter valid numbers")
-
-        tk.Button(dialog, text="Add", command=add).grid(row=3, columnspan=2, pady=10)
-
-    def generate_random(self):
-        count = 5
-        max_arrival = 10
-        max_burst = 10
-        max_priority = 5
+class CPUSchedulerGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("CPU Scheduler GUI")
+        self.geometry("900x650")
 
         self.processes = []
-        for pid in range(1, count + 1):
-            arrival = random.randint(0, max_arrival)
-            burst = random.randint(1, max_burst)
-            priority = random.randint(0, max_priority)
-            self.processes.append(Process(pid, arrival, burst, priority))
+        self.pid_colors = {"CS": "#cccccc"}   
+        self.animation_speed = 300            
 
-        self.update_process_table()
-        messagebox.showinfo("Random Processes", f"Generated {count} random processes.")
+        self._build_input_frame()
+        self._build_button_frame()
+        self._build_gantt_frame()
+        self._build_metrics_frame()
 
-    def update_process_table(self):
-        self.process_table.delete(*self.process_table.get_children())
+    def _build_input_frame(self):
+        frame = ttk.LabelFrame(self, text="Add Process / Randomize", padding=8)
+        frame.pack(fill="x", padx=10, pady=5)
+
+
+        ttk.Label(frame, text="PID:").grid(row=0, column=0)
+        self.pid_var = tk.IntVar()
+        ttk.Entry(frame, textvariable=self.pid_var, width=6).grid(row=0, column=1)
+
+        ttk.Label(frame, text="Arrival Time:").grid(row=0, column=2)
+        self.at_var = tk.IntVar()
+        ttk.Entry(frame, textvariable=self.at_var, width=6).grid(row=0, column=3)
+
+        ttk.Label(frame, text="Burst Time:").grid(row=0, column=4)
+        self.bt_var = tk.IntVar()
+        ttk.Entry(frame, textvariable=self.bt_var, width=6).grid(row=0, column=5)
+
+        ttk.Button(frame, text="Add", command=self.add_process).grid(row=0, column=6, padx=6)
+        ttk.Button(frame, text="Clear All", command=self.clear_processes).grid(row=0, column=7)
+
+
+        ttk.Label(frame, text="Random N:").grid(row=0, column=8, padx=(20,0))
+        self.random_n = tk.IntVar(value=5)
+        ttk.Spinbox(frame, from_=1, to=20, textvariable=self.random_n, width=6).grid(row=0, column=9)
+        ttk.Button(frame, text="Generate", command=self.generate_processes).grid(row=0, column=10, padx=6)
+
+
+        self.listbox = tk.Listbox(self, height=6)
+        self.listbox.pack(fill="x", padx=10, pady=(0,10))
+
+    def _build_button_frame(self):
+        frame = ttk.Frame(self, padding=8)
+        frame.pack(fill="x", padx=10, pady=5)
+        ttk.Label(frame, text="Choose Algorithm:").pack(side="left")
+        ttk.Button(frame, text="FCFS", command=self.run_fcfs).pack(side="left", padx=8)
+        ttk.Button(frame, text="SJF",  command=self.run_sjf).pack(side="left", padx=8)
+        ttk.Button(frame, text="SRTF", command=self.run_srtf).pack(side="left", padx=8)
+
+    def _build_gantt_frame(self):
+        frame = ttk.LabelFrame(self, text="Gantt Chart", padding=8)
+        frame.pack(fill="both", expand=True, padx=10, pady=5)
+        self.canvas = tk.Canvas(frame, height=120, bg="white")
+        self.canvas.pack(fill="x", expand=True)
+
+    def _build_metrics_frame(self):
+        frame = ttk.LabelFrame(self, text="Metrics", padding=8)
+        frame.pack(fill="both", expand=True, padx=10, pady=5)
+
+        cols = ("PID", "AT", "BT", "CT", "TAT", "RT")
+        self.tree = ttk.Treeview(frame, columns=cols, show="headings", height=8)
+        for c in cols:
+            self.tree.heading(c, text=c)
+            self.tree.column(c, width=70, anchor="center")
+        self.tree.pack(side="left", fill="both", expand=True)
+
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.tree.yview)
+        scrollbar.pack(side="right", fill="y")
+        self.tree.configure(yscroll=scrollbar.set)
+
+        avg_frame = ttk.Frame(frame)
+        avg_frame.pack(fill="x", pady=(10,0))
+        ttk.Label(avg_frame, text="Average TAT:").pack(side="left", padx=(0,5))
+        self.avg_tat_var = tk.StringVar(value="0.00")
+        ttk.Label(avg_frame, textvariable=self.avg_tat_var).pack(side="left", padx=(0,20))
+        ttk.Label(avg_frame, text="Average RT:").pack(side="left", padx=(0,5))
+        self.avg_rt_var = tk.StringVar(value="0.00")
+        ttk.Label(avg_frame, textvariable=self.avg_rt_var).pack(side="left")
+
+    def _assign_colors(self):
+        for p in self.processes:
+            if p.pid not in self.pid_colors:
+                # pastel random color
+                r = int((random.random()+1)*127)
+                g = int((random.random()+1)*127)
+                b = int((random.random()+1)*127)
+                self.pid_colors[p.pid] = f'#{r:02x}{g:02x}{b:02x}'
+
+    def _add_context_switches(self, gantt):
+        """Return a new gantt list with (1,'CS') between pid changes."""
+        full = []
+        for i, (dur, pid) in enumerate(gantt):
+            if i>0 and gantt[i-1][1] != pid:
+                full.append((1, "CS"))
+            full.append((dur, pid))
+        return full
+
+    def _show_metrics(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
         for p in sorted(self.processes, key=lambda x: x.pid):
-            status = "Ready" if p.remaining_time == p.burst_time else "Running" if p.remaining_time > 0 else "Completed"
-            self.process_table.insert("", "end", values=(f"P{p.pid}", p.arrival_time, p.burst_time, p.priority, status))
+            vals = (
+                p.pid, p.arrival_time, p.burst_time,
+                p.completion_time, p.turnaround_time, p.response_time
+            )
+            self.tree.insert("", "end", values=vals)
 
-    def set_speed(self, value):
-        self.simulation_speed = float(value)
+        if self.processes:
+            avg_tat = sum(p.turnaround_time for p in self.processes) / len(self.processes)
+            avg_rt  = sum(p.response_time   for p in self.processes) / len(self.processes)
+            self.avg_tat_var.set(f"{avg_tat:.2f}")
+            self.avg_rt_var.set(f"{avg_rt:.2f}")
 
-    def start_simulation(self):
-        if not self.processes:
-            messagebox.showerror("Error", "No processes to simulate")
+    def animate_gantt(self, gantt):
+        """Animate each block (including CS) in sequence."""
+        self.canvas.delete("all")
+        full = self._add_context_switches(gantt)
+        self._assign_colors()
+        self._draw_segment(full, idx=0, x=10, elapsed=0)
+
+    def _draw_segment(self, full, idx, x, elapsed):
+        if idx >= len(full):
+            self._show_metrics()
             return
-        if self.is_simulating:
+
+        dur, pid = full[idx]
+        color = self.pid_colors.get(pid, "#87CEEB")
+        scale = 25
+        width = dur * scale
+
+
+        self.canvas.create_rectangle(x, 20, x+width, 100, fill=color, outline="black")
+        label = "CS" if pid=="CS" else f"P{pid}"
+        self.canvas.create_text(x + width/2, 60, text=label, font=("Arial",10,"bold"))
+
+
+        self.canvas.create_text(x, 105, text=str(elapsed), anchor="n")
+
+
+        new_elapsed = elapsed + dur
+        delay = self.animation_speed * dur
+        self.after(delay,
+            lambda: self._draw_segment(full, idx+1, x+width, new_elapsed)
+        )
+
+
+        if idx == len(full)-1:
+            self.after(delay,
+                lambda: self.canvas.create_text(x+width, 105,
+                                                text=str(new_elapsed),
+                                                anchor="n")
+            )
+
+    def add_process(self):
+        pid, at, bt = self.pid_var.get(), self.at_var.get(), self.bt_var.get()
+        if any(p.pid==pid for p in self.processes):
+            messagebox.showerror("Error", f"PID {pid} already exists.")
             return
-        self.is_simulating = True
-        self.current_time = 0
-        self.simulation_end_time = max(p.arrival_time + p.burst_time for p in self.processes)
-        self.gantt_canvas.delete("all")
-        algorithm = self.algorithm.get()
-        quantum = int(self.quantum_entry.get())
-        if algorithm == "FCFS":
-            self.simulate_fcfs()
-        elif algorithm == "SJF":
-            self.simulate_sjf()
-        elif algorithm == "Round Robin":
-            self.simulate_rr(quantum)
-        elif algorithm == "MLFQ":
-            self.simulate_mlfq([quantum] * 4, [10, 20, 40, 80])
+        self.processes.append(Process(pid, at, bt))
+        self._assign_colors()
+        self.listbox.insert("end", f"P{pid}  AT={at}  BT={bt}")
 
-    def simulate_fcfs(self):
-        self.fcfs_queue = deque(sorted(self.processes.copy(), key=lambda x: x.arrival_time))
-        self.current_process = None
-        self.animate_simulation(self.fcfs_queue, fcfs=True)
+    def clear_processes(self):
+        self.processes.clear()
+        self.pid_colors = {"CS": "#cccccc"}
+        self.listbox.delete(0, "end")
+        self.canvas.delete("all")
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.avg_tat_var.set("0.00")
+        self.avg_rt_var.set("0.00")
 
-    def simulate_sjf(self):
-        processes = sorted(self.processes.copy(), key=lambda x: x.arrival_time)
-        self.animate_simulation(processes, sjf=True)
+    def generate_processes(self):
+        n = self.random_n.get()
+        self.processes = generate_random_processes(n)
+        self._assign_colors()
+        self.listbox.delete(0, "end")
+        for p in self.processes:
+            self.listbox.insert("end", f"P{p.pid}  AT={p.arrival_time}  BT={p.burst_time}")
+        self.canvas.delete("all")
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.avg_tat_var.set("0.00")
+        self.avg_rt_var.set("0.00")
 
-    def simulate_rr(self, quantum):
-        processes = sorted(self.processes.copy(), key=lambda x: x.arrival_time)
-        self.animate_simulation(processes, rr=True, quantum=quantum)
+    def run_fcfs(self):
+        for p in self.processes:
+            p.remaining_time, p.first_execution = p.burst_time, -1
+        gantt = fcfs.fcfs(self.processes)
+        self.animate_gantt(gantt)
 
-    def simulate_mlfq(self, quantums, allotments):
-        processes = sorted(self.processes.copy(), key=lambda x: x.arrival_time)
-        self.animate_simulation(processes, mlfq=True, quantums=quantums, allotments=allotments)
+    def run_sjf(self):
+        for p in self.processes:
+            p.remaining_time, p.first_execution = p.burst_time, -1
+        gantt = sjf.sjf(self.processes)
+        self.animate_gantt(gantt)
 
-    def animate_simulation(self, processes, **kwargs):
-        if self.animation_id:
-            self.root.after_cancel(self.animation_id)
-        if not self.is_simulating or self.current_time > self.simulation_end_time:
-            self.is_simulating = False
-            self.calculate_stats()
-            return
-        self.update_simulation_step(processes, **kwargs)
-        self.draw_gantt()
-        delay = int(1000 / self.simulation_speed)
-        self.animation_id = self.root.after(delay, lambda: self.animate_simulation(processes, **kwargs))
-
-    def update_simulation_step(self, processes, fcfs=False, **kwargs):
-        self.current_time += 1
-
-        if fcfs:
-            if not self.current_process and self.fcfs_queue:
-                if self.fcfs_queue[0].arrival_time <= self.current_time:
-                    self.current_process = self.fcfs_queue.popleft()
-
-            if self.current_process:
-                p = self.current_process
-                if p.response_time == -1:
-                    p.response_time = self.current_time - p.arrival_time
-                p.remaining_time -= 1
-                if p.remaining_time <= 0:
-                    p.completion_time = self.current_time
-                    p.turnaround_time = p.completion_time - p.arrival_time
-                    p.waiting_time = p.turnaround_time - p.burst_time
-                    self.current_process = None
-
-        else:
-            for p in processes:
-                if p.arrival_time <= self.current_time and p.remaining_time > 0:
-                    p.remaining_time -= 1
-                    if p.response_time == -1:
-                        p.response_time = self.current_time - p.arrival_time
-                    if p.remaining_time == 0:
-                        p.completion_time = self.current_time
-                        p.turnaround_time = p.completion_time - p.arrival_time
-                        p.waiting_time = p.turnaround_time - p.burst_time
-
-        self.update_process_table()
-        total_burst = sum(p.burst_time for p in self.processes)
-        completed = sum(p.burst_time - p.remaining_time for p in self.processes)
-        progress = int((completed / total_burst) * 100) if total_burst > 0 else 0
-        self.progress_label.config(text=f"Progress: {progress}%")
-
-    def draw_gantt(self):
-        self.gantt_canvas.delete("all")
-        width = self.gantt_canvas.winfo_width()
-        height = self.gantt_canvas.winfo_height()
-        max_time = max((p.completion_time for p in self.processes if p.completion_time > 0),
-                       default=max((p.arrival_time + p.burst_time for p in self.processes), default=1))
-        time_scale = (width - 100) / max(1, max_time)
-        row_height = 18
-        chart_top = 20
-        max_rows = (height - 40) // (row_height + 2)
-        self.gantt_canvas.create_line(50, height - 15, width - 50, height - 15, width=1, fill="#888")
-        marker_step = max(1, round(max_time / 10))
-        for t in range(0, max_time + 1, marker_step):
-            x_pos = 50 + t * time_scale
-            self.gantt_canvas.create_line(x_pos, height - 10, x_pos, height - 20, fill="#555")
-            self.gantt_canvas.create_text(x_pos, height - 8, text=str(t), font=('Arial', 7), anchor=tk.N)
-        visible_processes = [p for p in self.processes if p.arrival_time <= self.current_time]
-        rows = [[] for _ in range(max_rows)]
-        for p in sorted(visible_processes, key=lambda x: x.arrival_time):
-            executed = min(p.burst_time, max(0, self.current_time - p.arrival_time))
-            if executed <= 0:
-                continue
-            start_x = 50 + p.arrival_time * time_scale
-            end_x = start_x + executed * time_scale
-            placed = False
-            for row in rows:
-                if not row or row[-1][1] <= start_x:
-                    row.append((start_x, end_x, p))
-                    placed = True
-                    break
-            if not placed and max_rows > 0:
-                rows.append([(start_x, end_x, p)])
-        for row_idx, row in enumerate(rows[:max_rows]):
-            y_base = chart_top + row_idx * (row_height + 2)
-            for start_x, end_x, p in row:
-                self.gantt_canvas.create_rectangle(start_x, y_base, end_x, y_base + row_height, fill=p.color,
-                                                   outline="#333", width=0.5)
-                if end_x - start_x > 20:
-                    self.gantt_canvas.create_text((start_x + end_x) / 2, y_base + row_height / 2, text=f"P{p.pid}",
-                                                  font=('Arial', 7))
-        current_x = 50 + min(self.current_time, max_time) * time_scale
-        self.gantt_canvas.create_line(current_x, chart_top - 5, current_x, height - 15, fill="#f00", width=1,
-                                      arrow=tk.LAST)
-        self.gantt_canvas.create_text(current_x, chart_top - 8, text=f"{self.current_time}", font=('Arial', 7, 'bold'),
-                                      anchor=tk.S)
-
-    def calculate_stats(self):
-        completed = [p for p in self.processes if p.completion_time > 0]
-        if not completed:
-            return
-        avg_wait = sum(p.waiting_time for p in completed) / len(completed)
-        avg_turn = sum(p.turnaround_time for p in completed) / len(completed)
-        total_time = max(p.completion_time for p in completed)
-        self.avg_waiting.config(text=f"Avg Waiting: {avg_wait:.2f}")
-        self.avg_turnaround.config(text=f"Avg Turnaround: {avg_turn:.2f}")
-        self.total_time.config(text=f"Total Time: {total_time}")
-
-    def reset(self):
-        if self.animation_id:
-            self.root.after_cancel(self.animation_id)
-            self.animation_id = None
-        self.is_simulating = False
-        self.current_time = 0
-        self.current_process = None
-        self.processes = []
-        self.process_table.delete(*self.process_table.get_children())
-        self.gantt_canvas.delete("all")
-        self.avg_waiting.config(text="Avg Waiting: --")
-        self.avg_turnaround.config(text="Avg Turnaround: --")
-        self.total_time.config(text="Total Time: --")
-        self.progress_label.config(text="Progress: 0%")
+    def run_srtf(self):
+        for p in self.processes:
+            p.remaining_time   = p.burst_time
+            p.first_execution  = -1
+            p.completion_time  = 0
+            p.response_time    = -1
+            p.turnaround_time  = 0
+        gantt = srtf.srtf(self.processes)
+        self.animate_gantt(gantt)
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = CPUSchedulerApp(root)
-    root.mainloop()
+    CPUSchedulerGUI().mainloop()

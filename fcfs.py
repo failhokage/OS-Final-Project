@@ -1,23 +1,28 @@
 from process import Process
+from utils import print_gantt_chart, print_metrics, print_averages
 
-def schedule(processes):
-    time = 0
+def fcfs(processes):
+    processes.sort(key=lambda x: x.arrival_time)
     gantt = []
-    processes = sorted(processes, key=lambda x: x.arrival_time)
-
+    current_time = 0
+    
     for p in processes:
-        # Insert IDLE only if the CPU has to wait before the next process arrives
-        if time < p.arrival_time:
-            idle_time = p.arrival_time - time
-            gantt.append(('IDLE', idle_time))
-            time = p.arrival_time  # CPU jumps to the arrival of the next process
-
-        p.response_time = time - p.arrival_time
-        gantt.append((f'P{p.pid}', p.burst_time))
-        time += p.burst_time
-
-        p.completion_time = time
+        if current_time < p.arrival_time:
+            current_time = p.arrival_time
+        
+        execution_time = p.burst_time
+        gantt.append((execution_time, p.pid))
+        
+        p.completion_time = current_time + execution_time
         p.turnaround_time = p.completion_time - p.arrival_time
-        p.waiting_time = p.turnaround_time - p.burst_time
+        p.response_time = current_time - p.arrival_time
+        current_time = p.completion_time
+    
+    return gantt
 
-    return gantt, processes
+def run_fcfs(processes):
+    print("\nRunning FCFS Scheduling Algorithm")
+    gantt = fcfs(processes)
+    print_gantt_chart(processes, gantt)
+    print_metrics(processes)
+    print_averages(processes)

@@ -1,54 +1,73 @@
 from process import Process
+from utils import print_gantt_chart, print_metrics, print_averages
 
-def srtf_schedule(processes):
-    time = 0
+def srtf(processes):
+    processes.sort(key=lambda x: (x.arrival_time, x.pid))
     gantt = []
-
-    remaining_processes = [p for p in processes]
-    for p in remaining_processes:
-        p.remaining_time = p.burst_time
-        p.response_time = -1
-
-    queue = []
-
-    while remaining_processes or queue:
-        for p in remaining_processes[:]: 
-            if p.arrival_time <= time:
-                queue.append(p)
-                remaining_processes.remove(p)
-
-        if not queue:
-            next_arrival = min(remaining_processes, key=lambda x: x.arrival_time)
-            idle_time = next_arrival.arrival_time - time
-            gantt.append(('IDLE', idle_time))
-            time = next_arrival.arrival_time
-            continue
-
-        queue.sort(key=lambda x: x.remaining_time)
-        current = queue[0]
-
-        if current.response_time == -1:
-            current.response_time = time - current.arrival_time
-
-        next_arrivals = [p.arrival_time for p in remaining_processes if p.arrival_time > time]
-        if next_arrivals:
-            next_arrival_time = min(next_arrivals)
-            time_slice = min(current.remaining_time, next_arrival_time - time)
+    current_time = 0
+    completed = 0
+    n = len(processes)
+    prev_pid = None
+    last_start = 0
+    
+    while completed < n:
+      
+        ready = [p for p in processes 
+                if p.arrival_time <= current_time and p.remaining_time > 0]
+        
+        if ready:
+        
+            ready.sort(key=lambda x: (x.remaining_time, x.arrival_time, x.pid))
+            current_p = ready[0]
+            
+          
+            if current_p.pid != prev_pid:
+                if prev_pid is not None:
+                    gantt.append((current_time - last_start, prev_pid))
+                last_start = current_time
+                prev_pid = current_p.pid
+                
+              
+                if current_p.first_execution == -1:
+                    current_p.first_execution = current_time
+            
+        
+            current_p.remaining_time -= 1
+            current_time += 1
+            
+          
+            if current_p.remaining_time == 0:
+                gantt.append((current_time - last_start, current_p.pid))
+                prev_pid = None
+                current_p.completion_time = current_time
+                current_p.turnaround_time = current_p.completion_time - current_p.arrival_time
+                current_p.response_time = current_p.first_execution - current_p.arrival_time
+                completed += 1
         else:
-            time_slice = current.remaining_time
+            current_time += 1
+    
+    return gantt
 
-        gantt.append((f'P{current.pid}', time_slice))
-        time += time_slice
-        current.remaining_time -= time_slice
+def run_srtf(processes):
+    """
+    Run SRTF scheduling and print results
+    Args:
+        processes: List of Process objects
+    """
+    print("\nRunning SRTF (Preemptive) Scheduling Algorithm")
+    
+   
+    for p in processes:
+        p.remaining_time = p.burst_time
+        p.first_execution = -1
+        p.completion_time = 0
+        p.response_time = -1
+        p.turnaround_time = 0
+    
 
-        if current.remaining_time == 0:
-            queue.remove(current)
-            current.completion_time = time
-            current.turnaround_time = current.completion_time - current.arrival_time
-            current.waiting_time = current.turnaround_time - current.burst_time
-
-<<<<<<< HEAD
-    return gantt, processes
-=======
-    return gantt, processes
->>>>>>> bad0ba2adb82b2d58419c19667b2235c25cb1031
+    gantt = srtf(processes)
+    
+   
+    print_gantt_chart(processes, gantt)
+    print_metrics(processes)
+    print_averages(processes)

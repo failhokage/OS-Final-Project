@@ -1,6 +1,4 @@
-import tkinter as tk
-from gui import CPUSchedulerApp
+from scheduler import main
 
-root = tk.Tk()
-app = CPUSchedulerApp(root)
-root.mainloop()
+if __name__ == "__main__":
+    main()
