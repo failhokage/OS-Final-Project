@@ -41,10 +41,8 @@ The output will show process info, waiting time, turnaround time, and averages.
 | Name                | Work Done                          |
 |---------------------|------------------------------------|
 | Christian Demetillo | GitHub, FCFS, structure, README    |
-| Member 2            | SJF and SRTF                       |
-| Member 3            | Round Robin and MLFQ               |
+| Mary Vincent Lopez  | SJF and SRTF                       |
 
-(Replace names and tasks based on your group)
 
 ## ✅ Assumptions
 
