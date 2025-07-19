@@ -41,7 +41,7 @@ The output will show process info, waiting time, turnaround time, and averages.
 | Name                | Work Done                          |
 |---------------------|------------------------------------|
 | Christian Demetillo | GitHub, FCFS, structure, README    |
-| Mary Vincent Lopez  | SJF, SRTF, and excel               |
+| Mary Vincent Lopez  | SJF, SRTF, and Excel               |
 
 
 ## ✅ Assumptions
