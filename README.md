@@ -38,10 +38,10 @@ The output will show process info, waiting time, turnaround time, and averages.
 
 ## 👨‍👩‍👧‍👦 Group Members and Contributions
 
-| Name                | Work Done                          |
-|---------------------|------------------------------------|
-| Christian Demetillo | GitHub, FCFS, structure, README    |
-| Mary Vincent Lopez  | SJF, SRTF, and Excel               |
+| Name                | Work Done                              |
+|---------------------|----------------------------------------|
+| Christian Demetillo | GitHub, FCFS, structure, README, GUI   |
+| Mary Vincent Lopez  | SJF, SRTF, MLFQ                        |
 
 
 ## ✅ Assumptions
