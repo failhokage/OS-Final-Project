@@ -44,9 +44,14 @@ class CPUSchedulerGUI(tk.Tk):
         ttk.Spinbox(frame, from_=1, to=20, textvariable=self.random_n, width=6).grid(row=0, column=9)
         ttk.Button(frame, text="Generate", command=self.generate_processes).grid(row=0, column=10, padx=6)
 
-        ttk.Label(frame, text="Time Quantum:").grid(row=0, column=11, padx=(20,0))
-        self.tq_var = tk.IntVar(value=3)
-        ttk.Entry(frame, textvariable=self.tq_var, width=6).grid(row=0, column=12)
+        # MLFQ Quantum and Allotment (single inputs)
+        ttk.Label(frame, text="MLFQ Quantum:").grid(row=1, column=0, padx=(10,0), pady=5)
+        self.mlfq_quantum = tk.IntVar(value=4)
+        ttk.Entry(frame, textvariable=self.mlfq_quantum, width=6).grid(row=1, column=1)
+
+        ttk.Label(frame, text="Time Allotment:").grid(row=1, column=2, padx=(20,0))
+        self.mlfq_allotment = tk.IntVar(value=6)
+        ttk.Entry(frame, textvariable=self.mlfq_allotment, width=6).grid(row=1, column=3)
 
         self.listbox = tk.Listbox(self, height=6)
         self.listbox.pack(fill="x", padx=10, pady=(0,10))
@@ -68,9 +73,7 @@ class CPUSchedulerGUI(tk.Tk):
         self.canvas_frame = tk.Frame(frame)
         self.canvas_frame.pack(fill="both", expand=True)
 
-        self.canvas = tk.Canvas(
-            self.canvas_frame, height=120, bg="white", scrollregion=(0, 0, 3000, 120)
-        )
+        self.canvas = tk.Canvas(self.canvas_frame, height=120, bg="white", scrollregion=(0, 0, 3000, 120))
         self.canvas.pack(side="top", fill="both", expand=True)
 
         self.h_scroll = ttk.Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
@@ -122,10 +125,8 @@ class CPUSchedulerGUI(tk.Tk):
         for item in self.tree.get_children():
             self.tree.delete(item)
         for p in sorted(self.processes, key=lambda x: x.pid):
-            self.tree.insert("", "end", values=(
-                p.pid, p.arrival_time, p.burst_time,
-                p.completion_time, p.turnaround_time, p.response_time
-            ))
+            self.tree.insert("", "end", values=(p.pid, p.arrival_time, p.burst_time,
+                                                  p.completion_time, p.turnaround_time, p.response_time))
         if self.processes:
             avg_tat = sum(p.turnaround_time for p in self.processes) / len(self.processes)
             avg_rt  = sum(p.response_time   for p in self.processes) / len(self.processes)
@@ -187,7 +188,6 @@ class CPUSchedulerGUI(tk.Tk):
         self.at_var.set(0)
         self.bt_var.set(0)
         self.random_n.set(5)
-        self.tq_var.set(3)
 
     def generate_processes(self):
         n = self.random_n.get()
@@ -234,7 +234,7 @@ class CPUSchedulerGUI(tk.Tk):
             p.completion_time  = 0
             p.response_time    = -1
             p.turnaround_time  = 0
-        tq = self.tq_var.get()
+        tq = self.mlfq_quantum.get()
         try:
             gantt = round_robin.rr(self.processes, tq)
         except Exception as e:
@@ -258,7 +258,14 @@ class CPUSchedulerGUI(tk.Tk):
             p.priority         = 0
             p.remaining_quantum = 0
             p.allotment = 0
-        queues_config = [(0, 4), (1, 8), (2, None)]
+
+        quantum = self.mlfq_quantum.get()
+        allotment = self.mlfq_allotment.get()
+        queues_config = [
+            (0, quantum, allotment),
+            (1, quantum * 2, allotment * 2),
+            (2, None, 1000)
+        ]
         try:
             gantt = mlfq.mlfq(self.processes, queues_config)
         except Exception as e:

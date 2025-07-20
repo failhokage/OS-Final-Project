@@ -1,13 +1,6 @@
 from collections import deque
 
 def mlfq(processes, queues_config):
-    """
-    Multi-Level Feedback Queue Scheduler.
-
-    :param processes: List of Process instances
-    :param queues_config: List of tuples (priority_level, time_quantum or None)
-    :return: Gantt chart list of (duration, pid)
-    """
     n = len(processes)
     gantt = []
     time = 0
@@ -16,16 +9,14 @@ def mlfq(processes, queues_config):
     active = [False] * n
     processes.sort(key=lambda p: p.arrival_time)
 
-    # Deep copy so we don't modify original process order
-    pid_map = {p.pid: p for p in processes}
-
     def enqueue(proc, level):
         proc.priority = level
-        if proc.remaining_quantum == 0 and queues_config[level][1]:
-            proc.remaining_quantum = queues_config[level][1]
+        tq = queues_config[level][1]
+        allot = queues_config[level][2]
+        proc.remaining_quantum = tq if tq else 9999
+        proc.allotment = allot
         ready_queues[level].append(proc)
 
-    # Add new arrivals to Q0
     def check_arrivals(curr_time):
         for proc in processes:
             if not active[proc.pid] and proc.arrival_time <= curr_time:
@@ -34,39 +25,33 @@ def mlfq(processes, queues_config):
 
     current_proc = None
     current_level = None
-    idle_time = 0
 
     while completed < n:
         check_arrivals(time)
 
-        # Pick the highest priority non-empty queue
         for level, queue in enumerate(ready_queues):
             if queue:
                 current_proc = queue.popleft()
                 current_level = level
                 break
         else:
-            # CPU is idle
             time += 1
-            idle_time += 1
             continue
 
         if current_proc.first_execution == -1:
             current_proc.first_execution = time
             current_proc.response_time = time - current_proc.arrival_time
 
-        tq = queues_config[current_level][1]  # None means FCFS
-        exec_time = min(current_proc.remaining_time, current_proc.remaining_quantum if tq else current_proc.remaining_time)
+        tq = queues_config[current_level][1]
+        exec_time = min(current_proc.remaining_time, current_proc.remaining_quantum)
 
-        # Execute the process
         for _ in range(exec_time):
             gantt.append((1, current_proc.pid))
             time += 1
             current_proc.remaining_time -= 1
-            if tq:
-                current_proc.remaining_quantum -= 1
+            current_proc.remaining_quantum -= 1
+            current_proc.allotment -= 1
             check_arrivals(time)
-
             if current_proc.remaining_time == 0:
                 break
 
@@ -75,20 +60,17 @@ def mlfq(processes, queues_config):
             current_proc.turnaround_time = time - current_proc.arrival_time
             completed += 1
         else:
-            # Demote if quantum expired and not last level
-            if tq and current_proc.remaining_quantum == 0 and current_level + 1 < len(queues_config):
+            if current_proc.allotment <= 0 and current_level + 1 < len(queues_config):
                 enqueue(current_proc, current_level + 1)
+            elif tq and current_proc.remaining_quantum == 0:
+                enqueue(current_proc, current_level)
             else:
-                # Requeue at same level (FCFS or unfinished quantum)
                 enqueue(current_proc, current_level)
 
     return merge_gantt(gantt)
 
 
 def merge_gantt(gantt):
-    """
-    Combine consecutive executions of same PID into (duration, pid) tuples
-    """
     if not gantt:
         return []
 
