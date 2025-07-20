@@ -44,7 +44,6 @@ class CPUSchedulerGUI(tk.Tk):
         ttk.Spinbox(frame, from_=1, to=20, textvariable=self.random_n, width=6).grid(row=0, column=9)
         ttk.Button(frame, text="Generate", command=self.generate_processes).grid(row=0, column=10, padx=6)
 
-        # MLFQ Quantum and Allotment (single inputs)
         ttk.Label(frame, text="MLFQ Quantum:").grid(row=1, column=0, padx=(10,0), pady=5)
         self.mlfq_quantum = tk.IntVar(value=4)
         ttk.Entry(frame, textvariable=self.mlfq_quantum, width=6).grid(row=1, column=1)
@@ -126,7 +125,7 @@ class CPUSchedulerGUI(tk.Tk):
             self.tree.delete(item)
         for p in sorted(self.processes, key=lambda x: x.pid):
             self.tree.insert("", "end", values=(p.pid, p.arrival_time, p.burst_time,
-                                                  p.completion_time, p.turnaround_time, p.response_time))
+                                                p.completion_time, p.turnaround_time, p.response_time))
         if self.processes:
             avg_tat = sum(p.turnaround_time for p in self.processes) / len(self.processes)
             avg_rt  = sum(p.response_time   for p in self.processes) / len(self.processes)
@@ -137,7 +136,8 @@ class CPUSchedulerGUI(tk.Tk):
         self.canvas.delete("all")
         full = self._add_context_switches(gantt)
         self._assign_colors()
-        self._draw_segment(full, idx=0, x=10, elapsed=0)
+        min_arrival = min((p.arrival_time for p in self.processes), default=0)
+        self._draw_segment(full, idx=0, x=10, elapsed=min_arrival)
 
     def _draw_segment(self, full, idx, x, elapsed):
         if idx >= len(full):

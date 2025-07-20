@@ -1,43 +1,58 @@
-from process import Process
+from collections import deque
 
-def rr(processes, time_quantum):
-    processes.sort(key=lambda p: p.arrival_time)
+def rr(processes, quantum):
+    time = min(p.arrival_time for p in processes)
+    queue = deque()
     gantt = []
-    current_time = 0
-    ready_queue = []
-    remaining = processes[:]
+    processes = sorted(processes, key=lambda p: p.arrival_time)
+    n = len(processes)
+    i = 0
+    completed = 0
 
-    while ready_queue or remaining:
+    for p in processes:
+        p.remaining_time = p.burst_time
+        p.first_execution = -1
 
-        arriving = [p for p in remaining if p.arrival_time <= current_time]
-        for p in arriving:
-            ready_queue.append(p)
-            remaining.remove(p)
+    # Enqueue initial processes
+    while i < n and processes[i].arrival_time <= time:
+        queue.append(processes[i])
+        i += 1
 
-        if not ready_queue:
-            current_time += 1
+    while completed < n:
+        if not queue:
+            time += 1
+            while i < n and processes[i].arrival_time <= time:
+                queue.append(processes[i])
+                i += 1
             continue
 
-        p = ready_queue.pop(0)
-        if p.first_execution == -1:
-            p.first_execution = current_time
-            p.response_time = current_time - p.arrival_time
+        current = queue.popleft()
 
-        exec_time = min(time_quantum, p.remaining_time)
-        gantt.append((exec_time, p.pid))
-        p.remaining_time -= exec_time
-        current_time += exec_time
+        if current.first_execution == -1:
+            current.first_execution = time
+            current.response_time = time - current.arrival_time
 
+        run_time = min(quantum, current.remaining_time)
+        gantt.append((run_time, current.pid))
+        time += run_time
+        current.remaining_time -= run_time
 
-        arriving_during = [x for x in remaining if x.arrival_time <= current_time]
-        for x in arriving_during:
-            ready_queue.append(x)
-            remaining.remove(x)
+        # ⛔ Fix: capture newly arrived processes first
+        arrived = []
+        while i < n and processes[i].arrival_time <= time:
+            arrived.append(processes[i])
+            i += 1
 
-        if p.remaining_time > 0:
-            ready_queue.append(p)
+        # 🔁 Re-queue current process if not done
+        if current.remaining_time > 0:
+            queue.append(current)
         else:
-            p.completion_time = current_time
-            p.turnaround_time = p.completion_time - p.arrival_time
+            current.completion_time = time
+            current.turnaround_time = time - current.arrival_time
+            completed += 1
+
+        # ✅ Append new arrivals AFTER the current process
+        for p in arrived:
+            queue.append(p)
 
     return gantt
