@@ -113,6 +113,9 @@ class CPUSchedulerGUI(tk.Tk):
                 b = int((random.random() + 1) * 127)
                 self.pid_colors[p.pid] = f'#{r:02x}{g:02x}{b:02x}'
 
+    # Assign gray color to IDLE
+        self.pid_colors["IDLE"] = "#A9A9A9"
+        
     def _add_context_switches(self, gantt):
         full = []
         for i, (dur, pid) in enumerate(gantt):
@@ -137,8 +140,8 @@ class CPUSchedulerGUI(tk.Tk):
         self.canvas.delete("all")
         full = self._add_context_switches(gantt)
         self._assign_colors()
-        min_arrival = min((p.arrival_time for p in self.processes), default=0)
-        self._draw_segment(full, idx=0, x=10, elapsed=min_arrival)
+        self._draw_segment(full, idx=0, x=10, elapsed=0)  # Always start at 0
+
 
     def _draw_segment(self, full, idx, x, elapsed):
         if idx >= len(full):

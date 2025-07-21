@@ -1,7 +1,7 @@
 from collections import deque
 
 def rr(processes, quantum):
-    time = min(p.arrival_time for p in processes)
+    time = 0
     queue = deque()
     gantt = []
     processes = sorted(processes, key=lambda p: p.arrival_time)
@@ -12,6 +12,7 @@ def rr(processes, quantum):
     for p in processes:
         p.remaining_time = p.burst_time
         p.first_execution = -1
+        p.response_time = -1
 
     # Enqueue initial processes
     while i < n and processes[i].arrival_time <= time:
@@ -20,7 +21,11 @@ def rr(processes, quantum):
 
     while completed < n:
         if not queue:
-            time += 1
+            # CPU is IDLE
+            next_arrival = processes[i].arrival_time
+            idle_duration = next_arrival - time
+            gantt.append((idle_duration, "IDLE"))
+            time = next_arrival
             while i < n and processes[i].arrival_time <= time:
                 queue.append(processes[i])
                 i += 1
@@ -30,6 +35,7 @@ def rr(processes, quantum):
 
         if current.first_execution == -1:
             current.first_execution = time
+        if current.response_time == -1:
             current.response_time = time - current.arrival_time
 
         run_time = min(quantum, current.remaining_time)
@@ -37,22 +43,24 @@ def rr(processes, quantum):
         time += run_time
         current.remaining_time -= run_time
 
-        # ⛔ Fix: capture newly arrived processes first
+        # Capture any new arrivals during this time
         arrived = []
         while i < n and processes[i].arrival_time <= time:
             arrived.append(processes[i])
             i += 1
 
-        # 🔁 Re-queue current process if not done
+        # Re-queue current process if not done
         if current.remaining_time > 0:
             queue.append(current)
         else:
             current.completion_time = time
-            current.turnaround_time = time - current.arrival_time
-            completed += 1
+            current.turnaround_time = current.completion_time - current.arrival_time
 
-        # ✅ Append new arrivals AFTER the current process
+        # Add new arrivals to queue after current process
         for p in arrived:
             queue.append(p)
+
+        if current.remaining_time == 0:
+            completed += 1
 
     return gantt

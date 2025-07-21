@@ -5,19 +5,21 @@ def fcfs(processes):
     processes.sort(key=lambda x: x.arrival_time)
     gantt = []
     current_time = 0
-    
+
     for p in processes:
+        # Insert IDLE if CPU is idle before process arrives
         if current_time < p.arrival_time:
+            gantt.append((p.arrival_time - current_time, "IDLE"))
             current_time = p.arrival_time
-        
+
         execution_time = p.burst_time
         gantt.append((execution_time, p.pid))
-        
+
         p.completion_time = current_time + execution_time
         p.turnaround_time = p.completion_time - p.arrival_time
         p.response_time = current_time - p.arrival_time
         current_time = p.completion_time
-    
+
     return gantt
 
 def run_fcfs(processes):
