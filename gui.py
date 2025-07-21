@@ -13,7 +13,7 @@ class CPUSchedulerGUI(tk.Tk):
 
         self.processes = []
         self.pid_colors = {"CS": "#cccccc"}
-        self.animation_speed = 300
+        self.animation_speed = 50
 
         self._build_input_frame()
         self._build_button_frame()
@@ -44,7 +44,7 @@ class CPUSchedulerGUI(tk.Tk):
         ttk.Spinbox(frame, from_=1, to=20, textvariable=self.random_n, width=6).grid(row=0, column=9)
         ttk.Button(frame, text="Generate", command=self.generate_processes).grid(row=0, column=10, padx=6)
 
-        ttk.Label(frame, text="MLFQ Quantum:").grid(row=1, column=0, padx=(10,0), pady=5)
+        ttk.Label(frame, text="RR/MLFQ Quantum:").grid(row=1, column=0, padx=(10,0), pady=5)
         self.mlfq_quantum = tk.IntVar(value=4)
         ttk.Entry(frame, textvariable=self.mlfq_quantum, width=6).grid(row=1, column=1)
 
@@ -64,6 +64,7 @@ class CPUSchedulerGUI(tk.Tk):
         ttk.Button(frame, text="SRTF", command=self.run_srtf).pack(side="left", padx=4)
         ttk.Button(frame, text="RR",   command=self.run_rr).pack(side="left", padx=4)
         ttk.Button(frame, text="MLFQ", command=self.run_mlfq).pack(side="left", padx=4)
+        ttk.Button(frame, text="Export Results", command=self.export_results).pack(side="left", padx=4)
 
     def _build_gantt_frame(self):
         frame = ttk.LabelFrame(self, text="Gantt Chart", padding=8)
@@ -275,6 +276,27 @@ class CPUSchedulerGUI(tk.Tk):
             messagebox.showinfo("MLFQ", "No scheduling steps generated.")
             return
         self.animate_gantt(gantt)
+
+    def export_results(self):
+        if not self.processes:
+            messagebox.showwarning("No Data", "No process data to export.")
+            return
+
+        try:
+            with open("scheduling_results.txt", "w") as f:
+                f.write("PID\tAT\tBT\tCT\tTAT\tRT\n")
+                for p in sorted(self.processes, key=lambda x: x.pid):
+                    f.write(f"{p.pid}\t{p.arrival_time}\t{p.burst_time}\t"
+                            f"{p.completion_time}\t{p.turnaround_time}\t{p.response_time}\n")
+                avg_tat = sum(p.turnaround_time for p in self.processes) / len(self.processes)
+                avg_rt = sum(p.response_time for p in self.processes) / len(self.processes)
+                f.write(f"\nAverage Turnaround Time: {avg_tat:.2f}\n")
+                f.write(f"Average Response Time: {avg_rt:.2f}\n")
+
+            messagebox.showinfo("Export Successful", "Results saved to 'scheduling_results.txt'")
+        except Exception as e:
+            messagebox.showerror("Export Failed", str(e))
+
 
 if __name__ == "__main__":
     CPUSchedulerGUI().mainloop()
